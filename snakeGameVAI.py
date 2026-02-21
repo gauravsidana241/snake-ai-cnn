@@ -23,7 +23,7 @@ class SnakeGameAI:
         self.reset()
 
     def reset(self):
-        self.direction = "RIGHT"
+        self.vx, self.vy = 1, 0
         self.head = [self.w // 2, self.h // 2]
         self.snake = [
             list(self.head),
@@ -43,10 +43,53 @@ class SnakeGameAI:
 
     def get_state(self):
         # 2D Grid for CNN Input: (Height, Width)
-        state = np.zeros((self.h // GRID_SIZE, self.w // GRID_SIZE))
-        for pt in self.snake:
-            state[pt[1]//GRID_SIZE][pt[0]//GRID_SIZE] = 1 # Body
-        state[self.food[1]//GRID_SIZE][self.food[0]//GRID_SIZE] = 2 # Food
+        state = np.zeros(11) # 11 vectors input feature
+        '''
+        state = [
+                    danger_straight, 0
+                    danger_right, 1 
+                    danger_left, 2 
+                    moving_left, 3
+                    moving_right, 4
+                    moving_up, 5
+                    moving_down, 6
+                    food_left, 7
+                    food_right, 8
+                    food_up,  9
+                    food_down, 10
+                ]
+        '''
+        # mapping danger directions
+        state[0] = int(self.is_collision([self.head[0] + self.vx * GRID_SIZE, self.head[1] + self.vy * GRID_SIZE]))  # danger straight
+        state[1] = int(self.is_collision([self.head[0] - self.vy * GRID_SIZE, self.head[1] + self.vx * GRID_SIZE]))  # danger right
+        state[2] = int(self.is_collision([self.head[0] + self.vy * GRID_SIZE, self.head[1] - self.vx * GRID_SIZE]))  # danger left
+
+        # mapping snake head direction to state indices
+        # Set direction state based on velocity (no dictionary needed)
+        if self.vx < 0:
+            state[3] = 1  # moving LEFT
+        elif self.vx > 0:
+            state[4] = 1  # moving RIGHT
+            
+        if self.vy < 0:
+            state[5] = 1  # moving UP
+        elif self.vy > 0:
+            state[6] = 1  # moving DOWN
+
+        # mapping food direction relative to the snake head to state indices
+        food_x = self.food[0] - self.head[0]
+        food_y = self.food[1] - self.head[1]
+        if food_x < 0:
+            state[7] = 1  # food left
+        elif food_x > 0:
+            state[8] = 1  # food right
+        # if food_x == 0, neither is set — correct
+
+        if food_y < 0:
+            state[9] = 1  # food up
+        elif food_y > 0:
+            state[10] = 1  # food down
+        
         return state
 
     def is_collision(self, pt=None):
@@ -61,28 +104,16 @@ class SnakeGameAI:
 
     def _move(self, action):
         # 0: UP, 1: DOWN, 2: LEFT, 3: RIGHT
-        directions = ["UP", "DOWN", "LEFT", "RIGHT"]
-        new_dir = directions[action]
-
-        # Block 180-degree turns
-        if (new_dir == "UP" and self.direction != "DOWN") or \
-        (new_dir == "DOWN" and self.direction != "UP") or \
-        (new_dir == "LEFT" and self.direction != "RIGHT") or \
-        (new_dir == "RIGHT" and self.direction != "LEFT"):
-            self.direction = new_dir
+        directions = [(0,-1), (0,1), (-1,0), (1,0)] 
+        new_vx, new_vy = directions[action]
+        if (new_vx, new_vy) != (-self.vx, -self.vy):
+            self.vx, self.vy = new_vx, new_vy
 
         # Create NEW head position (don't mutate!)
         x, y = self.head
-        if self.direction == "UP": 
-            y -= GRID_SIZE
-        elif self.direction == "DOWN": 
-            y += GRID_SIZE
-        elif self.direction == "LEFT": 
-            x -= GRID_SIZE
-        elif self.direction == "RIGHT": 
-            x += GRID_SIZE
-        
-        self.head = [x, y]  # <-- New list object!
+        x += self.vx * GRID_SIZE
+        y += self.vy * GRID_SIZE
+        self.head = [x, y]
 
     def play_step(self, action):
         self.frame_iteration += 1
